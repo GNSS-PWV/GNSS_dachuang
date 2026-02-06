@@ -55,6 +55,7 @@ def filter_data(test_data):
     TS = test_data[:, 6]
     PS = test_data[:, 7]
     WPS = test_data[:, 8]
+    Tm = test_data[:,13]
 
     Lat_mask = (Lat > 25) & (Lat < 50)
     Lon_mask = (Lon > 205) & (Lon < 270)
@@ -364,11 +365,28 @@ class CNNBiLSTMModel(nn.Module):
         return out
 
 
+# ========== 简单注意力层 ==========
+class SimpleAttention(nn.Module):
+    def __init__(self, hidden_dim, dropout=0.3):
+        super().__init__()
+        self.W = nn.Linear(hidden_dim, 1)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x):
+        # 计算注意力权重
+        attn_weights = torch.softmax(self.W(x).squeeze(-1), dim=1)
+        attn_weights = self.dropout(attn_weights)
+        
+        # 加权求和
+        attn_out = torch.bmm(attn_weights.unsqueeze(1), x).squeeze(1)
+        return x + attn_out.unsqueeze(1)  # 残差连接
+
+
 # ========== CNN-BiLSTM+注意力模型 ==========
 class CNNBiLSTMAttentionModel(nn.Module):
-    """CNN-BiLSTM+多头注意力模型（输出3个目标）"""
-
-    def __init__(self, input_size, hidden_size=64, num_layers=2, output_size=3, time_steps=48, dropout=0.3):
+    """优化后的CNN-BiLSTM+注意力模型"""
+    
+    def __init__(self, input_size, hidden_size=64, num_layers=2, output_size=3, time_steps=48, dropout=0.4):
         super().__init__()
         self.time_steps = time_steps
 
@@ -376,12 +394,12 @@ class CNNBiLSTMAttentionModel(nn.Module):
             nn.Conv1d(input_size, 32, kernel_size=3, padding=1),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.3),
             nn.MaxPool1d(kernel_size=2),
             nn.Conv1d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.3),
             nn.MaxPool1d(kernel_size=2)
         )
 
@@ -394,7 +412,9 @@ class CNNBiLSTMAttentionModel(nn.Module):
             dropout=dropout if num_layers > 1 else 0
         )
 
-        self.attention = DynamicMultiHeadAttention(hidden_size * 2, num_heads=4, dropout=0.2)
+        # 使用更简单的注意力机制
+        self.attention = SimpleAttention(hidden_size * 2, dropout=0.4)
+        self.layer_norm = nn.LayerNorm(hidden_size * 2)
 
         self.fc = nn.Sequential(
             nn.Linear(hidden_size * 2, 32),
@@ -409,8 +429,10 @@ class CNNBiLSTMAttentionModel(nn.Module):
         x_lstm = x_cnn.transpose(1, 2)
 
         lstm_out, _ = self.lstm(x_lstm)
+        lstm_out = self.layer_norm(lstm_out)
         attn_out = self.attention(lstm_out)
-        out = self.fc(attn_out[:, -1, :])
+        # 使用全局平均池化
+        out = self.fc(torch.mean(attn_out, dim=1))
 
         return out
 
