@@ -1,0 +1,10 @@
+寒假的时候用lstm、lstm+cnn、bilstm+cnn，bilstm+attention+cnn
+当时写出来感觉一般
+后来改gru
+好多了
+当时gru+cnn就不太好，会有下降
+就搞纯gru+xg
+所以你发我的第一阶段里面就是gru+xg吗？
+嗯嗯
+用gru+xg分别预测四个参数的代码都在里面
+然后数据地址我都写的服务器里的可以不用动，本地测试的时候你注释掉就好

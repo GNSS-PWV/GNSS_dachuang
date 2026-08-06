@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.idea/
+
+# 数据与结果 (可再生/太大, 不入库)
+data/
+*.npy
+*.pth
+*.xlsx
+*.png
+*.jpg
+*.out
+*.err
+
+# 日志
+logs/
