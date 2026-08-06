@@ -8,7 +8,6 @@ data/
 *.npy
 *.pth
 *.xlsx
-*.png
 *.jpg
 *.out
 *.err
