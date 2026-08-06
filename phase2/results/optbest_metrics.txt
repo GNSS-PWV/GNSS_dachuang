@@ -1,0 +1,34 @@
+ProfileTransformer PWV 测试集评估结果
+============================================================
+样本数:   113294
+RMSE:     0.0609 mm
+MAE:      0.0366 mm
+R2:       1.0000
+Bias:     0.0018 mm
+Rel RMSE: 0.28%
+
+Pi 评估:
+Pi RMSE:  0.000710
+Pi R2:    0.9903
+Pi Bias:   0.000006
+
+模型超参数:
+  data_dir: /share/home/u23114/tj23114/packages/dachuang_pwv/PS/xg_data
+  output_dir: /share/home/u23114/tj23114/packages/dachuang_pwv/phase2/result_optuna_best
+  batch_size: 64
+  max_len: 30
+  epochs: 100
+  lr: 0.0003051
+  weight_decay: 1.18e-05
+  d_model: 128
+  n_heads: 16
+  n_layers: 5
+  ff_dim: 1024
+  dropout: 0.0506
+  patience: 20
+  test_station_ratio: 0.1
+  val_ratio: 0.15
+  seed: 42
+  max_files: None
+  test_stations: /share/home/u23114/tj23114/packages/dachuang_pwv/phase2/test_stations_official_36.txt
+  num_workers: 4
