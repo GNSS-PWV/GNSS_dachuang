@@ -1,0 +1,1054 @@
+import glob
+import os
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
+import xgboost
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+import optuna
+import warnings
+
+warnings.filterwarnings("ignore")
+
+# 设置随机种子以确保结果可重复
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+
+print(f"XGBoost版本：{xgboost.__version__}")
+print(f"XGBoost安装路径：{xgboost.__file__}")
+
+# 确定设备
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"使用设备: {device}")
+
+
+def get_file_list(path, typ="*.txt"):
+    return sorted(glob.glob(os.path.join(path, typ)))
+
+
+def read_data(fp):
+    try:
+        df = pd.read_csv(fp, header=0, sep=None, engine='python')
+        first_col = df.columns[0]
+        if (first_col is None) or (str(first_col).strip() == '') or str(first_col).startswith('Unnamed'):
+            df = df.rename(columns={first_col: 'TIME'})
+    except Exception:
+        column_names = ['TIME', 'YEAR', 'DOY', 'LAT', 'LON', 'ELV', 'TS', 'PS', 'WPS', 'ZWD', 'ZHD', 'ZTD', 'PWV', 'Tm']
+        df = pd.read_csv(fp, header=None, names=column_names, sep=None, engine='python')
+
+    cols_needed = ['TIME', 'YEAR', 'DOY', 'LAT', 'LON', 'ELV', 'TS', 'PS', 'WPS', 'Tm']  # 仅保留输入和目标列
+    df = df[[c for c in cols_needed if c in df.columns]]
+    return df
+
+
+def filter_data(test_data):
+    Lat = test_data[:, 3]
+    Lon = test_data[:, 4]
+    ELV = test_data[:, 5]
+    TS = test_data[:, 6]
+    PS = test_data[:, 7]
+    WPS = test_data[:, 8]
+    Tm = test_data[:,13]
+
+    Lat_mask = (Lat > 25) & (Lat < 50)
+    Lon_mask = (Lon > 205) & (Lon < 270)
+    filter_mask = Lat_mask & Lon_mask
+
+    filtered = test_data[filter_mask]
+    return filtered if filtered.size > 0 else None
+
+
+def prepare_data(file_list):
+    dfs = [read_data(fp) for fp in file_list]
+    data = pd.concat(dfs, ignore_index=True).dropna().reset_index(drop=True)
+
+    # 仅保留输入相关的特征工程（经纬度、高程、时间）
+    if 'TIME' in data.columns:
+        data['TIME'] = pd.to_datetime(data['TIME'], errors='coerce')
+        data['hour'] = data['TIME'].dt.hour
+        data['month'] = data['TIME'].dt.month
+        data['season'] = pd.cut(data['month'], bins=[0, 3, 6, 9, 12], labels=['春', '夏', '秋', '冬']).astype(
+            'category').cat.codes
+
+    # 目标变量的滞后特征（作为时序输入补充）
+    data['TS_lag1'] = data['TS'].shift(1)
+    data['PS_lag1'] = data['PS'].shift(1)
+    data['WPS_lag1'] = data['WPS'].shift(1)  # 新增WPS滞后特征
+    if 'Tm' in data.columns:
+        data['Tm_lag1'] = data['Tm'].shift(1)  # 新增Tm滞后特征
+    
+    # 为PS添加额外的特征工程
+    print("为PS添加额外特征工程...")
+    # PS的气压差特征
+    data['PS_diff1'] = data['PS'] - data['PS_lag1']
+    # PS与TS的交互特征
+    data['PS_TS_ratio'] = data['PS'] / (data['TS'] + 1e-8)
+    # 气压高度校正（考虑高程对气压的影响）
+    # 简化的气压高度公式：P = P0 * exp(-g*h/(R*T))，这里使用近似
+    data['PS_elev_corrected'] = data['PS'] * np.exp(0.00012 * data['ELV'])
+    
+    data = data.dropna()
+
+    # 经纬度的三角函数编码（提升空间特征表达）
+    data['lat_sin'] = np.sin(data['LAT'] * np.pi / 180)
+    data['lat_cos'] = np.cos(data['LAT'] * np.pi / 180)
+    data['lon_sin'] = np.sin(data['LON'] * np.pi / 180)
+    data['lon_cos'] = np.cos(data['LON'] * np.pi / 180)
+
+    return data
+
+
+def create_sequences(df, time_steps=24):
+    # 仅保留输入相关特征：经纬度、高程、时间特征、目标滞后特征
+    feats = [
+        'LAT', 'LON', 'ELV',
+        'hour', 'month', 'season',
+        'TS_lag1', 'PS_lag1', 'WPS_lag1',
+        'Tm_lag1',
+        'lat_sin', 'lat_cos', 'lon_sin', 'lon_cos',
+        # 新增PS特征
+        'PS_diff1', 'PS_TS_ratio', 'PS_elev_corrected'
+    ]
+    feats = [f for f in feats if f in df.columns]
+    target = ['TS', 'PS', 'WPS']
+    if 'Tm' in df.columns:
+        target.append('Tm')  # 添加Tm作为新的目标变量
+
+    X, y = [], []
+    data_x = df[feats].values
+    data_y = df[target].values
+
+    for i in range(len(df) - time_steps):
+        X.append(data_x[i:i + time_steps])
+        y.append(data_y[i + time_steps])
+
+    X = np.array(X)
+    y = np.array(y)
+
+    if len(X) == 0 or len(y) == 0:
+        raise ValueError(f"序列生成失败：数据长度{len(df)} < time_steps{time_steps}")
+    return X, y
+
+
+# ========== 时序数据增强 ==========
+def augment_time_series(x, noise_level=0.01, scale_range=(0.95, 1.05), shift_range=(-1, 1)):
+    """时序数据增强：添加高斯噪声、随机缩放、轻微循环移位（仅训练集）"""
+    noise = np.random.normal(0, noise_level, x.shape)
+    x_aug = x + noise
+
+    scale = np.random.uniform(*scale_range)
+    x_aug = x_aug * scale
+
+    shift = np.random.randint(*shift_range)
+    if shift != 0:
+        x_aug = np.roll(x_aug, shift, axis=0)
+
+    return x_aug
+
+
+# ========== 带增强的Dataset ==========
+class TimeSeriesDataset(Dataset):
+    "PyTorch时序数据集,支持训练集数据增强"
+
+    def __init__(self, X, y, augment=False, noise_level=0.01):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.float32)
+        self.augment = augment
+        self.noise_level = noise_level
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        x = self.X[idx].numpy()
+        y = self.y[idx].numpy()
+
+        if self.augment:
+            x = augment_time_series(x, noise_level=self.noise_level)
+            y = y + np.random.normal(0, 0.005, y.shape)  # 标签轻微噪声缓解过拟合
+
+        return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
+
+
+# ========== 动态多头注意力层 ==========
+class DynamicMultiHeadAttention(nn.Module):
+    def __init__(self, hidden_dim, num_heads=4, dropout=0.2):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = hidden_dim // num_heads
+        assert self.head_dim * num_heads == hidden_dim, "hidden_dim必须能被num_heads整除"
+
+        self.W_q = nn.Linear(hidden_dim, hidden_dim)
+        self.W_k = nn.Linear(hidden_dim, hidden_dim)
+        self.W_v = nn.Linear(hidden_dim, hidden_dim)
+        self.fc = nn.Linear(hidden_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        seq_len = x.size(1)
+
+        q = self.W_q(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.W_k(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.W_v(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_scores = torch.matmul(q, k.transpose(-2, -1)) / torch.sqrt(
+            torch.tensor(self.head_dim, dtype=torch.float32))
+        attn_weights = torch.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        out = torch.matmul(attn_weights, v).transpose(1, 2).contiguous().view(batch_size, seq_len,
+                                                                              self.num_heads * self.head_dim)
+        out = self.fc(out)
+        out = self.dropout(out)
+
+        return out
+
+
+# ========== LSTM模型 ==========
+class LSTMModel(nn.Module):
+    """LSTM模型（无注意力机制，输出3个目标）"""
+    def __init__(self, input_size, hidden_size=64, num_layers=2, output_size=3, time_steps=24, dropout=0.3):
+        super(LSTMModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.time_steps = time_steps
+
+        self.lstm = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+        self.fc1 = nn.Linear(hidden_size, 32)
+        self.dropout = nn.Dropout(dropout)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(32, output_size)
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        # 直接使用LSTM的最后一个时间步的输出
+        out = self.fc1(lstm_out[:, -1, :])
+        out = self.relu(out)
+        out = self.dropout(out)
+        out = self.fc2(out)
+        return out
+
+# ========== CNN-LSTM模型 ==========
+class CNNLSTMModel(nn.Module):
+    """CNN-LSTM模型（无注意力机制，输出3个目标）"""
+
+    def __init__(self, input_size, hidden_size=64, num_layers=2, output_size=3, time_steps=48, dropout=0.3):
+        super().__init__()
+        self.time_steps = time_steps
+
+        self.cnn = nn.Sequential(
+            nn.Conv1d(input_size, 32, kernel_size=3, padding=1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.MaxPool1d(kernel_size=2)
+        )
+
+        self.lstm = nn.LSTM(
+            input_size=64,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size * 2, 32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, output_size)
+        )
+
+    def forward(self, x):
+        x_cnn = x.transpose(1, 2)
+        x_cnn = self.cnn(x_cnn)
+        x_lstm = x_cnn.transpose(1, 2)
+
+        lstm_out, _ = self.lstm(x_lstm)
+        # 直接使用LSTM的最后一个时间步的输出
+        out = self.fc(lstm_out[:, -1, :])
+
+        return out
+
+
+# ========== CNN-BiLSTM模型（无注意力机制） ==========
+class CNNBiLSTMModel(nn.Module):
+    """CNN-BiLSTM模型（无注意力机制，输出3个目标）"""
+
+    def __init__(self, input_size, hidden_size=64, num_layers=2, output_size=3, time_steps=48, dropout=0.3):
+        super().__init__()
+        self.time_steps = time_steps
+
+        self.cnn = nn.Sequential(
+            nn.Conv1d(input_size, 32, kernel_size=3, padding=1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.MaxPool1d(kernel_size=2)
+        )
+
+        self.lstm = nn.LSTM(
+            input_size=64,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size * 2, 32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, output_size)
+        )
+
+    def forward(self, x):
+        x_cnn = x.transpose(1, 2)
+        x_cnn = self.cnn(x_cnn)
+        x_lstm = x_cnn.transpose(1, 2)
+
+        lstm_out, _ = self.lstm(x_lstm)
+        out = self.fc(lstm_out[:, -1, :])
+
+        return out
+
+
+# ========== 改进的注意力层 ==========
+class EnhancedAttention(nn.Module):
+    def __init__(self, hidden_dim, num_heads=2, dropout=0.3):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = hidden_dim // num_heads
+        
+        self.W_q = nn.Linear(hidden_dim, hidden_dim)
+        self.W_k = nn.Linear(hidden_dim, hidden_dim)
+        self.W_v = nn.Linear(hidden_dim, hidden_dim)
+        self.W_o = nn.Linear(hidden_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+    
+    def forward(self, x):
+        batch_size, seq_len, hidden_dim = x.shape
+        
+        # 线性变换
+        q = self.W_q(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.W_k(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.W_v(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        # 计算注意力权重
+        attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
+        attn_weights = torch.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        
+        # 加权求和
+        attn_out = torch.matmul(attn_weights, v).transpose(1, 2).contiguous().view(batch_size, seq_len, hidden_dim)
+        attn_out = self.W_o(attn_out)
+        attn_out = self.dropout(attn_out)
+        
+        # 残差连接和层归一化
+        out = self.layer_norm(x + attn_out)
+        return out
+
+
+# ========== CNN-BiLSTM+注意力模型 ==========
+class CNNBiLSTMAttentionModel(nn.Module):
+    """深度优化的CNN-BiLSTM+注意力模型"""
+    
+    def __init__(self, input_size, hidden_size=96, num_layers=2, output_size=3, time_steps=48, dropout=0.4, num_heads=4):
+        super().__init__()
+        self.time_steps = time_steps
+
+        # 改进的CNN特征提取器
+        self.cnn = nn.Sequential(
+            nn.Conv1d(input_size, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.MaxPool1d(kernel_size=2)
+        )
+
+        # 增强的BiLSTM
+        self.lstm = nn.LSTM(
+            input_size=128,  # 匹配CNN输出通道
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+
+        # 多层注意力机制
+        self.attention = EnhancedAttention(hidden_size * 2, num_heads=num_heads, dropout=0.3)
+        
+        # 增强的全连接层
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size * 2 * 2, 64),  # 调整输入维度以匹配混合池化
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, output_size)
+        )
+
+    def forward(self, x):
+        x_cnn = x.transpose(1, 2)
+        x_cnn = self.cnn(x_cnn)
+        x_lstm = x_cnn.transpose(1, 2)
+
+        lstm_out, _ = self.lstm(x_lstm)
+        attn_out = self.attention(lstm_out)
+        
+        # 混合池化策略：全局平均池化 + 全局最大池化
+        avg_pool = torch.mean(attn_out, dim=1)
+        max_pool = torch.max(attn_out, dim=1)[0]
+        pooled = torch.cat([avg_pool, max_pool], dim=1)
+        
+        # 调整全连接层输入维度
+        out = self.fc(pooled)
+
+        return out
+
+
+# ========== 异常值处理 ==========
+def remove_outliers(df, cols, method='iqr', iqr_factor=1.5, n_std=3):
+    if method == 'iqr':
+        for col in cols:
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - iqr_factor * IQR
+            upper_bound = Q3 + iqr_factor * IQR
+            df = df[(df[col] >= lower_bound) & (df[col] <= upper_bound)]
+    elif method == 'std':
+        for col in cols:
+            mean = df[col].mean()
+            std = df[col].std()
+            df = df[(df[col] >= mean - n_std * std) & (df[col] <= mean + n_std * std)]
+    return df
+
+
+# ========== 超参数搜索 ==========
+def optimize_model_params(X_train, y_train, X_val, y_val, input_size, time_steps, model_type, output_size, n_trials=30):
+    """使用optuna搜索模型最佳超参数"""
+    def objective(trial):
+        # 基础参数
+        params = {
+            'learning_rate': trial.suggest_float('learning_rate', 1e-5, 1e-2, log=True),
+            'hidden_size': trial.suggest_int('hidden_size', 32, 128),
+            'dropout': trial.suggest_float('dropout', 0.1, 0.5),
+            'weight_decay': trial.suggest_float('weight_decay', 1e-6, 1e-3, log=True),
+            'num_layers': trial.suggest_int('num_layers', 1, 3)
+        }
+        
+        # 根据模型类型添加特定参数
+        if 'attention' in model_type:
+            params['num_heads'] = trial.suggest_int('num_heads', 2, 6)
+        
+        # 创建数据加载器用于评估
+        batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+        
+        # 创建临时数据集和加载器
+        from torch.utils.data import TensorDataset
+        train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), 
+                                    torch.tensor(y_train, dtype=torch.float32))
+        val_dataset = TensorDataset(torch.tensor(X_val, dtype=torch.float32), 
+                                  torch.tensor(y_val, dtype=torch.float32))
+        
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size)
+        
+        # 创建并训练模型
+        try:
+            model = train_model(
+                train_loader, val_loader,
+                input_size=input_size,
+                time_steps=time_steps,
+                model_type=model_type,
+                output_size=output_size,
+                epochs=50,  # 搜索时使用较少轮数
+                **params
+            )
+            
+            # 评估模型
+            model.eval()
+            val_loss = 0.0
+            criterion = nn.MSELoss()
+            
+            with torch.no_grad():
+                for batch_X, batch_y in val_loader:
+                    batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+                    outputs = model(batch_X)
+                    loss = criterion(outputs, batch_y)
+                    val_loss += loss.item() * batch_X.size(0)
+            
+            val_loss /= len(val_loader.dataset)
+            return val_loss
+        except Exception as e:
+            print(f"超参数搜索出错: {e}")
+            return float('inf')
+    
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=n_trials)
+    
+    print(f"\n最佳超参数 ({model_type}):")
+    for key, value in study.best_params.items():
+        print(f"  {key}: {value}")
+    print(f"最佳验证损失: {study.best_value:.4f}")
+    
+    return study.best_params
+
+
+# ========== 模型训练（输出3个目标） ==========
+def train_model(train_loader, val_loader, input_size, time_steps, model_type='lstm', output_size=3, epochs=100, **kwargs):
+    # 从kwargs中获取超参数，如未提供则使用默认值
+    learning_rate = kwargs.get('learning_rate', 0.0005)
+    hidden_size = kwargs.get('hidden_size', 64)
+    dropout = kwargs.get('dropout', 0.3)
+    weight_decay = kwargs.get('weight_decay', 1e-4)
+    num_layers = kwargs.get('num_layers', 2)
+    num_heads = kwargs.get('num_heads', 4)
+
+    if model_type == 'lstm':
+        model = LSTMModel(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            output_size=output_size,
+            time_steps=time_steps,
+            dropout=dropout
+        ).to(device)
+        model_name = "LSTM"
+    elif model_type == 'cnn_lstm':
+        model = CNNLSTMModel(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            output_size=output_size,
+            time_steps=time_steps,
+            dropout=dropout
+        ).to(device)
+        model_name = "CNN-LSTM"
+    elif model_type == 'cnn_bilstm':
+        model = CNNBiLSTMModel(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            output_size=output_size,
+            time_steps=time_steps,
+            dropout=dropout
+        ).to(device)
+        model_name = "CNN-BiLSTM"
+    elif model_type == 'cnn_bilstm_attention':
+        # 确保hidden_size能被num_heads整除
+        if hidden_size % num_heads != 0:
+            # 调整hidden_size为最接近的能被num_heads整除的值
+            hidden_size = (hidden_size // num_heads) * num_heads
+            if hidden_size < num_heads:
+                hidden_size = num_heads
+        
+        model = CNNBiLSTMAttentionModel(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            output_size=output_size,
+            time_steps=time_steps,
+            dropout=dropout,
+            num_heads=num_heads
+        ).to(device)
+        model_name = "CNN-BiLSTM-Attention"
+    else:
+        raise ValueError(f"不支持的模型类型: {model_type}")
+
+    criterion = nn.MSELoss(reduction='none')  # 使用none reduction以便应用权重
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=8, verbose=True, min_lr=1e-7
+    )
+
+    # 设置变量权重（根据变量的重要性和预测难度）
+    if output_size == 4:
+        # TS, PS, WPS, Tm
+        weights = torch.tensor([1.0, 2.0, 1.5, 1.0], device=device)
+    elif output_size == 3:
+        # TS, PS, WPS
+        weights = torch.tensor([1.0, 2.0, 1.5], device=device)
+    else:
+        # 默认权重
+        weights = torch.ones(output_size, device=device)
+
+    best_val_loss = float('inf')
+    patience = 10
+    patience_counter = 0
+    best_model_state = None
+
+    for epoch in range(epochs):
+        model.train()
+        train_loss = 0.0
+        for batch_X, batch_y in train_loader:
+            batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+            optimizer.zero_grad()
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+            # 应用权重并计算均值
+            weighted_loss = (loss * weights).mean()
+            weighted_loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            optimizer.step()
+            train_loss += weighted_loss.item() * batch_X.size(0)
+        train_loss /= len(train_loader.dataset)
+
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch_X, batch_y in val_loader:
+                batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+                outputs = model(batch_X)
+                loss = criterion(outputs, batch_y)
+                # 应用权重并计算均值
+                weighted_loss = (loss * weights).mean()
+                val_loss += weighted_loss.item() * batch_X.size(0)
+        val_loss /= len(val_loader.dataset)
+
+        scheduler.step(val_loss)
+
+        if (epoch + 1) % 5 == 0:
+            print(
+                f'Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, LR: {optimizer.param_groups[0]["lr"]:.6f}')
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            best_model_state = model.state_dict().copy()
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f'Early stopping at epoch {epoch + 1}')
+                break
+
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+    return model
+
+
+def predict_with_lstm(model, data_loader):
+    model.eval()
+    predictions = []
+    targets = []
+    with torch.no_grad():
+        for batch_X, batch_y in data_loader:
+            batch_X = batch_X.to(device)
+            outputs = model(batch_X)
+            predictions.append(outputs.cpu().numpy())
+            targets.append(batch_y.numpy())
+    return np.vstack(predictions), np.vstack(targets)
+
+
+def save_predictions(output_dir, model_preds):
+    os.makedirs(output_dir, exist_ok=True)
+    np.save(os.path.join(output_dir, "model_preds.npy"), model_preds)
+    print(f"预测结果已保存至 {output_dir}")
+
+
+# ========== XGBoost超参优化（适配3个目标） ==========
+def optimize_xgboost_params(X_train, y_train, X_val, y_val):
+    def objective(trial):
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 100, 300),
+            'max_depth': trial.suggest_int('max_depth', 3, 8),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.15),
+            'subsample': trial.suggest_float('subsample', 0.7, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.7, 1.0),
+            'gamma': trial.suggest_float('gamma', 0, 0.3),
+            'min_child_weight': trial.suggest_int('min_child_weight', 1, 3),
+            'reg_alpha': trial.suggest_float('reg_alpha', 0, 0.5),
+            'reg_lambda': trial.suggest_float('reg_lambda', 1, 3),
+            'eval_metric': 'rmse',
+            'tree_method': 'hist',
+        }
+        model = xgboost.XGBRegressor(**params)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False, early_stopping_rounds=30)
+        preds = model.predict(X_val)
+        return np.sqrt(mean_squared_error(y_val, preds))
+
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=20)
+    return study.best_params
+
+
+def xgboost_refinement(X_train, y_train, X_val, y_val, lstm_preds_train, lstm_preds_val):
+    # 拼接输入特征+统计特征+LSTM预测结果
+    X_train_stats = np.hstack([
+        X_train,
+        np.mean(X_train, axis=1).reshape(-1, 1),
+        np.std(X_train, axis=1).reshape(-1, 1),
+        lstm_preds_train
+    ])
+    X_val_stats = np.hstack([
+        X_val,
+        np.mean(X_val, axis=1).reshape(-1, 1),
+        np.std(X_val, axis=1).reshape(-1, 1),
+        lstm_preds_val
+    ])
+
+    models = []
+    target_names = ['TS', 'PS', 'WPS']  # 三个目标的名称
+    for i in range(y_train.shape[1]):
+        print(f"训练XGBoost模型 {i + 1}/3 - {target_names[i]}")
+        best_params = optimize_xgboost_params(X_train_stats, y_train[:, i], X_val_stats, y_val[:, i])
+        model = xgboost.XGBRegressor(**best_params)
+        model.fit(X_train_stats, y_train[:, i], eval_set=[(X_val_stats, y_val[:, i])], verbose=False,
+                  early_stopping_rounds=30)
+        models.append(model)
+        # 特征重要性输出
+        feature_names = (
+                [f'feat_{j}' for j in range(X_train.shape[1])] +
+                ['mean', 'std', 'lstm_pred_ts', 'lstm_pred_ps', 'lstm_pred_wps']
+        )
+        importance = model.feature_importances_
+        print("特征重要性:", sorted(zip(feature_names, importance), key=lambda x: -x[1])[:5])
+    return models
+
+
+def evaluate_models(y_test, model, test_loader, model_type="LSTM"):
+    lstm_preds, _ = predict_with_lstm(model, test_loader)
+
+    # 分别计算目标的指标
+    target_names = ['TS', 'PS', 'WPS']
+    if y_test.shape[1] > 3:
+        target_names.append('Tm')  # 添加Tm作为新的目标变量
+    lstm_metrics = {}
+    for i, name in enumerate(target_names):
+        # 计算标准化数据的指标
+        y_true = y_test[:, i]
+        y_pred = lstm_preds[:, i]
+        
+        lstm_metrics[name] = {
+            'mse': mean_squared_error(y_true, y_pred),
+            'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
+            'mae': mean_absolute_error(y_true, y_pred),
+            'r2': r2_score(y_true, y_pred)
+        }
+
+    # 打印详细评估结果
+    print(f"\n=== {model_type}模型评估（标准化尺度）===")
+    for name in target_names:
+        print(f"\n{name}:")
+        print(
+            f"MSE: {lstm_metrics[name]['mse']:.4f}, RMSE: {lstm_metrics[name]['rmse']:.4f}, MAE: {lstm_metrics[name]['mae']:.4f}, R2: {lstm_metrics[name]['r2']:.4f}")
+
+    # 整体指标（平均）
+    lstm_overall = {
+        'mse': np.mean([lstm_metrics[name]['mse'] for name in target_names]),
+        'rmse': np.mean([lstm_metrics[name]['rmse'] for name in target_names]),
+        'mae': np.mean([lstm_metrics[name]['mae'] for name in target_names]),
+        'r2': np.mean([lstm_metrics[name]['r2'] for name in target_names])
+    }
+
+    print("\n=== 整体平均指标 ===")
+    print(
+        f"{model_type}: MSE={lstm_overall['mse']:.4f}, RMSE={lstm_overall['rmse']:.4f}, MAE={lstm_overall['mae']:.4f}, R2={lstm_overall['r2']:.4f}")
+
+    return {'model': lstm_metrics, 'overall': lstm_overall}, lstm_preds
+
+
+def main():
+    root_dir = r"D:\python11\pythonProject\test1\2014_sdata"
+    output_dir = r"D:\python11\pythonProject\test1\2014_sresult"
+    time_steps = 48
+    batch_size = 32
+    print("开始加载数据...")
+
+    try:
+        file_list = get_file_list(root_dir, "*.txt")
+        if not file_list:
+            print("错误：未找到任何txt文件！")
+            return
+
+        result_data = prepare_data(file_list)
+        if result_data is None or result_data.empty:
+            print("无有效数据！")
+            return
+
+        # 移除异常值（针对目标变量）
+        print("移除异常值...")
+        outlier_cols = ['TS', 'PS', 'WPS']
+        if 'Tm' in result_data.columns:
+            outlier_cols.append('Tm')  # 添加Tm作为异常值处理的目标变量
+        result_data = remove_outliers(result_data, outlier_cols, method='iqr')
+
+        # 数据抽稀（保留时序特征）
+        #print(f"原始数据量：{len(result_data)}，开始5倍抽稀...")
+        #result_data = result_data.iloc[::5].reset_index(drop=True)
+        #print(f"抽稀后数据量：{len(result_data)}")
+
+        # 数据类型转换
+        numeric_cols = ['YEAR', 'DOY', 'LAT', 'LON', 'ELV', 'TS', 'PS', 'WPS', 'Tm',
+                        'hour', 'month', 'season', 'TS_lag1', 'PS_lag1', 'WPS_lag1', 'Tm_lag1',
+                        'lat_sin', 'lat_cos', 'lon_sin', 'lon_cos']
+        present_cols = [c for c in numeric_cols if c in result_data.columns]
+        result_data[present_cols] = result_data[present_cols].astype(np.float32)
+
+        # 创建时序序列
+        X_seq, y_seq = create_sequences(result_data, time_steps)
+        feature_dim = X_seq.shape[2]
+        # 动态生成目标变量名称
+        target_names = ['TS', 'PS', 'WPS']
+        if y_seq.shape[1] > 3:
+            target_names.append('Tm')
+        target_str = '/'.join(target_names)
+        print(f"序列形状：X={X_seq.shape}, y={y_seq.shape}（目标：{target_str}）")
+
+        # 分层划分数据集（按季节）
+        print("按季节分层划分数据集...")
+        seasons = result_data['season'].iloc[time_steps:].values
+        X_temp, X_test, y_temp, y_test, season_temp, season_test = train_test_split(
+            X_seq, y_seq, seasons, test_size=0.2, random_state=42, stratify=seasons
+        )
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_temp, y_temp, test_size=0.25, random_state=42, stratify=season_temp
+        )
+
+        # 标准化
+        x_scaler = StandardScaler()
+        
+        # 特征标准化
+        X_train_flat = X_train.reshape(-1, feature_dim)
+        X_train_scaled_flat = x_scaler.fit_transform(X_train_flat)
+        X_train_scaled = X_train_scaled_flat.reshape(X_train.shape)
+
+        X_val_flat = X_val.reshape(-1, feature_dim)
+        X_val_scaled_flat = x_scaler.transform(X_val_flat)
+        X_val_scaled = X_val_scaled_flat.reshape(X_val.shape)
+
+        X_test_flat = X_test.reshape(-1, feature_dim)
+        X_test_scaled_flat = x_scaler.transform(X_test_flat)
+        X_test_scaled = X_test_scaled_flat.reshape(X_test.shape)
+
+        # 为每个目标变量使用单独的标准化器
+        scalers = {}
+        y_train_scaled = np.zeros_like(y_train)
+        y_val_scaled = np.zeros_like(y_val)
+        y_test_scaled = np.zeros_like(y_test)
+
+        # 为WPS添加对数变换
+        y_train_log = np.copy(y_train)
+        y_val_log = np.copy(y_val)
+        y_test_log = np.copy(y_test)
+        
+        print("对WPS进行对数变换...")
+        for i, name in enumerate(target_names):
+            if name == 'WPS':
+                # 对数变换（添加一个小的偏移量以避免log(0)）
+                y_train_log[:, i] = np.log1p(y_train[:, i])
+                y_val_log[:, i] = np.log1p(y_val[:, i])
+                y_test_log[:, i] = np.log1p(y_test[:, i])
+                print("  WPS对数变换完成")
+
+        print("标准化目标变量...")
+        for i, name in enumerate(target_names):
+            scalers[name] = StandardScaler()
+            if name == 'WPS':
+                # 对对数变换后的数据进行标准化
+                y_train_scaled[:, i] = scalers[name].fit_transform(y_train_log[:, i].reshape(-1, 1)).flatten()
+                y_val_scaled[:, i] = scalers[name].transform(y_val_log[:, i].reshape(-1, 1)).flatten()
+                y_test_scaled[:, i] = scalers[name].transform(y_test_log[:, i].reshape(-1, 1)).flatten()
+            else:
+                # 对其他变量进行标准化
+                y_train_scaled[:, i] = scalers[name].fit_transform(y_train[:, i].reshape(-1, 1)).flatten()
+                y_val_scaled[:, i] = scalers[name].transform(y_val[:, i].reshape(-1, 1)).flatten()
+                y_test_scaled[:, i] = scalers[name].transform(y_test[:, i].reshape(-1, 1)).flatten()
+            print(f"  {name} 标准化完成：均值={scalers[name].mean_[0]:.2f}, 标准差={np.sqrt(scalers[name].var_[0]):.2f}")
+
+        # 创建数据加载器
+        train_dataset = TimeSeriesDataset(X_train_scaled, y_train_scaled, augment=True, noise_level=0.01)
+        val_dataset = TimeSeriesDataset(X_val_scaled, y_val_scaled, augment=False)
+        test_dataset = TimeSeriesDataset(X_test_scaled, y_test_scaled, augment=False)
+
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size)
+
+        # 训练模型
+        models = {}
+        best_params = {}
+        # 新的模型组合：LSTM、CNN+LSTM、CNN+biLSTM、CNN+biLSTM+attention
+        for model_type in ['lstm', 'cnn_lstm', 'cnn_bilstm', 'cnn_bilstm_attention']:  # 优先LSTM、CNN+LSTM、CNN+BiLSTM、CNN+BiLSTM+Attention
+            # 定义模型显示名称映射
+            model_display_names = {
+                'lstm': 'LSTM',
+                'cnn_lstm': 'CNN-LSTM',
+                'cnn_bilstm': 'CNN-BiLSTM',
+                'cnn_bilstm_attention': 'CNN-BiLSTM-Attention'
+            }
+            display_name = model_display_names[model_type]
+
+            # 动态设置输出维度，根据目标变量的数量
+            output_size = y_train_scaled.shape[1]
+
+            print(f"\n{'=' * 60}")
+            print(f"搜索 {display_name} 模型的最佳超参数...")
+            print(f"{'=' * 60}")
+            
+            # 搜索超参数
+            best_params[model_type] = optimize_model_params(
+                X_train_scaled, y_train_scaled,
+                X_val_scaled, y_val_scaled,
+                input_size=feature_dim,
+                time_steps=time_steps,
+                model_type=model_type,
+                output_size=output_size,
+                n_trials=10  # 可以根据需要调整搜索次数
+            )
+
+            print(f"\n{'=' * 60}")
+            print(f"使用最佳超参数训练 {display_name} 模型...")
+            print(f"{'=' * 60}")
+            
+            # 为增强模型增加训练轮数
+            epochs = 120 if model_type == 'cnn_bilstm_attention' else 80
+            
+            # 使用最佳批量大小
+            batch_size = best_params[model_type].get('batch_size', 32)
+            
+            # 创建最终的数据加载器
+            train_dataset = TimeSeriesDataset(X_train_scaled, y_train_scaled, augment=True, noise_level=0.01)
+            val_dataset = TimeSeriesDataset(X_val_scaled, y_val_scaled, augment=False)
+            test_dataset = TimeSeriesDataset(X_test_scaled, y_test_scaled, augment=False)
+            
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size)
+            test_loader = DataLoader(test_dataset, batch_size=batch_size)
+            
+            model = train_model(
+                train_loader, val_loader,
+                input_size=feature_dim,
+                time_steps=time_steps,
+                model_type=model_type,
+                output_size=output_size,  # 动态输出维度
+                epochs=epochs,
+                **best_params[model_type]
+            )
+            models[model_type] = model
+
+            # 评估模型
+            metrics, lstm_preds = evaluate_models(
+                y_test_scaled,
+                model, test_loader,
+                model_type=display_name
+            )
+
+            # 反标准化并保存结果
+            def inverse_transform_all(y_scaled, scalers, target_names):
+                y_original = np.zeros_like(y_scaled)
+                for i, name in enumerate(target_names):
+                    y_scaled_reshaped = y_scaled[:, i].reshape(-1, 1)
+                    y_inverted = scalers[name].inverse_transform(y_scaled_reshaped).flatten()
+                    if name == 'WPS':
+                        # 对WPS进行指数变换，恢复原始尺度
+                        y_inverted = np.expm1(y_inverted)
+                    y_original[:, i] = y_inverted
+                return y_original
+            
+            lstm_preds_original = inverse_transform_all(lstm_preds, scalers, target_names)
+            save_predictions(os.path.join(output_dir, model_type), lstm_preds_original)
+
+            # 在原始尺度下评估每个参数的精度
+            y_true_original = inverse_transform_all(y_test_scaled, scalers, target_names)
+            
+            print(f"\n{'=' * 60}")
+            print(f"{display_name} 模型 - 原始尺度下每个参数的精度：")
+            print(f"{'=' * 60}")
+            
+            original_metrics = {}
+            for i, name in enumerate(target_names):
+                y_true = y_true_original[:, i]
+                y_pred = lstm_preds_original[:, i]
+                
+                mae = mean_absolute_error(y_true, y_pred)
+                mse = mean_squared_error(y_true, y_pred)
+                rmse = np.sqrt(mse)
+                r2 = r2_score(y_true, y_pred)
+                
+                # 计算相对误差（避免除以0）
+                abs_relative_error = np.abs((y_pred - y_true) / (y_true + 1e-8))
+                mape = np.mean(abs_relative_error) * 100  # 转换为百分比
+                
+                original_metrics[name] = {
+                    'mae': mae,
+                    'mse': mse,
+                    'rmse': rmse,
+                    'r2': r2,
+                    'mape': mape
+                }
+                
+                print(f"\n{name}:")
+                print(f"  MAE: {mae:.4f}")
+                print(f"  MSE: {mse:.4f}")
+                print(f"  RMSE: {rmse:.4f}")
+                print(f"  R2: {r2:.4f}")
+                print(f"  MAPE: {mape:.2f}%")
+            
+            print(f"\n{'=' * 60}")
+            print("所有参数平均指标：")
+            avg_mae = np.mean([original_metrics[name]['mae'] for name in target_names])
+            avg_mse = np.mean([original_metrics[name]['mse'] for name in target_names])
+            avg_rmse = np.mean([original_metrics[name]['rmse'] for name in target_names])
+            avg_r2 = np.mean([original_metrics[name]['r2'] for name in target_names])
+            avg_mape = np.mean([original_metrics[name]['mape'] for name in target_names])
+            print(f"  平均 MAE: {avg_mae:.4f}")
+            print(f"  平均 MSE: {avg_mse:.4f}")
+            print(f"  平均 RMSE: {avg_rmse:.4f}")
+            print(f"  平均 R2: {avg_r2:.4f}")
+            print(f"  平均 MAPE: {avg_mape:.2f}%")
+            print(f"{'=' * 60}")
+
+            # 保存模型
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'x_scaler': x_scaler,
+                'scalers': scalers,
+                'feature_dim': feature_dim,
+                'time_steps': time_steps
+            }, os.path.join(output_dir, f"{model_type}_model.pth"))
+
+        print("\n所有模型训练完成！")
+
+    except Exception as e:
+        print(f"执行出错：{e}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == '__main__':
+    main()
