@@ -1,0 +1,2 @@
+variant,RMSE,MAE,R2,Bias,N
+no_global,0.143078,0.101393,0.999938,-0.002126,11850
