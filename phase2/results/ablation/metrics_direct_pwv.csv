@@ -1,0 +1,2 @@
+variant,RMSE,MAE,R2,Bias,N
+direct_pwv,0.472538,0.289285,0.999326,0.086397,11850
