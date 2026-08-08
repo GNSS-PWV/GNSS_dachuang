@@ -1,0 +1,2 @@
+variant,RMSE,MAE,R2,Bias,N
+baseline,0.097027,0.069510,0.999972,0.019405,11850
