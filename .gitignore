@@ -1,16 +1,40 @@
-# Python
-__pycache__/
-*.pyc
-.idea/
-
-# 数据与结果 (可再生/太大, 不入库)
+# Data, profiles, raw archives and generated experiment outputs are never stored in Git.
 data/
-*.npy
-*.pth
-*.xlsx
-*.jpg
-*.out
-*.err
+**/data/
+**/profile_reconstructed_*/
+**/radiosonde_*/
+**/igra_batch_*/
+**/公开IGRA*/
+**/result*/
+**/_result*/
+**/checkpoints/
+**/*.csv
+**/*.zip
+**/*.nc
+**/*.nc4
+**/*.grib
+**/*.npy
+**/*.npz
+**/*.pth
+**/*.pt
+**/*.ckpt
+**/*.xlsx
+**/*.pptx
+**/*.doc
+**/*.docx
 
-# 日志
-logs/
+# Local environments and secrets
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+*key*.txt
+*credential*
+*password*
+
+# Local-only operations notes
+服务器上传授权与输入口径_*.md
+当前环境与继续条件_*.md
+tongji_upload_manifest_*.json

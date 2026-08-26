@@ -1,0 +1,445 @@
+# =============================================================================
+# FY-3G 陆地水汽反演项目 - 完整研究方案 (基于V1优化版本)
+# Physics-Informed Mamba with Hierarchical Validation
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 项目基本信息
+# -----------------------------------------------------------------------------
+project:
+  name: "FY3G_PWV_Retrieval_V2"
+  title_en: "Global Land Precipitable Water Vapor Retrieval from FY-3G MWRI-RM via a Physics-Informed Mamba Network: A Hierarchical Validation Framework"
+  title_cn: "基于物理感知Mamba网络的FY-3G MWRI-RM全球陆地水汽反演与分级验证框架"
+  version: "2.0.0"
+  author: "Your Name"
+  target_journal: "Remote Sensing of Environment (RSE)"
+
+# -----------------------------------------------------------------------------
+# 数据配置
+# -----------------------------------------------------------------------------
+data:
+  # 目标空间分辨率
+  target_resolution: 0.15  # 度 (约15km)
+
+  # 时间范围 (完整一年周期)
+  time_range:
+    start: "2023-12-05"  # 避开调试期
+    end: "2024-06-30"
+    # Current status: Only test data (1 day) available
+    # Need to download: ~400 days of ERA5 + GNSS labels
+
+  # 时间切割策略 (防止数据泄露)
+  temporal_split:
+    train_days: [1, 24]      # 每月1-24日用于训练
+    test_days: [25, 31]      # 每月25-月末用于测试
+
+  # 空间范围
+  spatial_extent:
+    type: "global_land"  # 全球陆地
+
+  # 地理平衡采样 (防止欧美数据主导)
+  geographic_sampling:
+    enabled: true
+    grid_size: 10.0          # 10°×10° 网格
+    max_samples_per_grid: 100  # 每个grid在每个batch中最多采样100个点
+
+  # -----------------------------------------------------------------------------
+  # FY-3G MWRI-RM 通道配置 (23通道)
+  # -----------------------------------------------------------------------------
+  fy3g_channels:
+    # MWRI部分 (10通道)
+    mwri:
+      - {freq: 10.65, pol: "V", resolution: 51}   # km
+      - {freq: 10.65, pol: "H", resolution: 51}
+      - {freq: 18.7, pol: "V", resolution: 30}
+      - {freq: 18.7, pol: "H", resolution: 30}
+      - {freq: 23.8, pol: "V", resolution: 27}
+      - {freq: 23.8, pol: "H", resolution: 27}
+      - {freq: 36.5, pol: "V", resolution: 18}
+      - {freq: 36.5, pol: "H", resolution: 18}
+      - {freq: 89.0, pol: "V", resolution: 9}
+      - {freq: 89.0, pol: "H", resolution: 9}
+
+    # MWHS部分 (13通道) - 关键创新点
+    mwhs:
+      # 118 GHz O2吸收线 (8通道)
+      - {freq: 118.75, offset: 0.0, pol: "V", resolution: 15}
+      - {freq: 118.75, offset: 1.1, pol: "V", resolution: 15}
+      - {freq: 118.75, offset: 1.1, pol: "H", resolution: 15}
+      - {freq: 118.75, offset: 2.5, pol: "V", resolution: 15}
+      - {freq: 118.75, offset: 2.5, pol: "H", resolution: 15}
+      - {freq: 118.75, offset: 3.0, pol: "V", resolution: 15}
+      - {freq: 118.75, offset: 3.0, pol: "H", resolution: 15}
+      - {freq: 118.75, offset: 5.0, pol: "V", resolution: 15}
+
+      # 183 GHz H2O吸收线 (5通道)
+      - {freq: 183.31, offset: 1.0, pol: "V", resolution: 15}
+      - {freq: 183.31, offset: 1.0, pol: "H", resolution: 15}
+      - {freq: 183.31, offset: 3.4, pol: "V", resolution: 15}
+      - {freq: 183.31, offset: 3.4, pol: "H", resolution: 15}
+      - {freq: 183.31, offset: 7.0, pol: "V", resolution: 15}
+
+  # -----------------------------------------------------------------------------
+  # 物理指数构造 (3通道) - 核心创新
+  # -----------------------------------------------------------------------------
+  physical_indices:
+    # 差分指数 (温湿解耦)
+    differential_index:
+      enabled: true
+      formula: "TB_118_1.1V - TB_183_3.4V"
+      purpose: "云散射相似但气体吸收不同，剔除云影响"
+
+    # 散射指数 (识别强对流)
+    scattering_index:
+      enabled: true
+      formula: "TB_23V - TB_89V"
+      purpose: "识别强对流和降水"
+
+    # 微波极化差指数 (地表粗糙度)
+    mpdi:
+      enabled: true
+      formula: "(TB_V - TB_H) / (TB_V + TB_H)"
+      purpose: "表征地表粗糙度和发射率"
+      channels: ["36.5", "89.0"]  # 对这些通道计算MPDI
+
+  # -----------------------------------------------------------------------------
+  # 地表环境数据 (13通道)
+  # -----------------------------------------------------------------------------
+  surface_data:
+    # 地表覆盖分量 (10通道) - 解决混合像元
+    land_cover:
+      source: "GlobeLand30"  # 30m分辨率
+      n_classes: 10
+      classes:
+        - "cropland"      # 耕地
+        - "forest"        # 林地
+        - "grassland"     # 草地
+        - "shrubland"     # 灌木
+        - "wetland"       # 湿地
+        - "water"         # 水体
+        - "tundra"        # 苔原
+        - "urban"         # 城市
+        - "barren"        # 裸地
+        - "snow_ice"      # 冰雪
+      processing: "fractional"  # 计算面积百分比，不插值！
+
+    # 植被指数 (1通道)
+    ndvi:
+      source: "MODIS_MOD13A2"  # 月合成
+      temporal_matching: "nearest_neighbor"  # 最近邻匹配
+      spatial_aggregation: "mean"  # GEE端聚合到15km
+
+    # 地形 (1通道)
+    dem:
+      source: "SRTM"
+      resolution: 30  # meters
+      normalization: "minmax"  # 归一化到[0,1]
+
+    # 纬度 (1通道)
+    latitude:
+      normalization: "sin_cos"  # 使用sin/cos编码
+
+  # -----------------------------------------------------------------------------
+  # 时空编码 (6通道)
+  # -----------------------------------------------------------------------------
+  spatiotemporal_encoding:
+    lat_encoding: ["sin", "cos"]  # 2通道
+    lon_encoding: ["sin", "cos"]  # 2通道
+    doy_encoding: ["sin", "cos"]  # 2通道 (Day of Year)
+
+  # -----------------------------------------------------------------------------
+  # 训练标签配置 (混合监督)
+  # -----------------------------------------------------------------------------
+  labels:
+    # 主要标签: ERA5 (面监督)
+    era5:
+      enabled: true
+      source: "ERA5_reanalysis"
+      variable: "total_column_water_vapour"  # kg/m2
+      resolution: 0.25  # degrees
+      interpolation: "bilinear"  # 双线性插值到15km
+      save_dir: "data/raw/labels/ERA5"  # 保存目录
+
+    # 锚点标签: GNSS (点监督) - 核心创新
+    gnss_anchor:
+      enabled: true
+      # Updated 2026-01-19: Changed data sources
+      sources:
+        - "IGS_Wuhan"      # Global network, stable
+        - "SuomiNet"       # US network, stable
+        - "Australia_BOM"  # Australia network, stable
+        - "EUREF"          # Europe network, stable
+        - "UCAR_COSMIC"    # NEW: No auth, direct PWV, global
+      # Removed: NGL (frequent download failures)
+      product: "ZTD"  # Zenith Total Delay
+      n_stations: 0  # 全球均匀采样约1500个站点
+      sampling_strategy: "global_uniform"  # 避免欧美主导
+      processing:
+        - "ZTD_to_ZWD"  # 去除静力延迟
+        - "ZWD_to_PWV"  # 转换为PWV
+      matching:
+        time_threshold: 3  # hours
+        distance_threshold: 30  # km
+
+  # -----------------------------------------------------------------------------
+  # 验证数据配置 (分级验证框架) - RSE加分项
+  # -----------------------------------------------------------------------------
+  validation:
+    # 第一级: 全球普适性验证
+    level1_igs:
+      enabled: true
+      source: "IGS_core_stations"
+      n_stations: 300  # 未参与训练的IGS核心站
+      purpose: "全球泛化能力验证"
+      metrics: ["Bias", "RMSE", "R2", "MAE"]
+
+    # 第二级: 区域精细化验证
+    level2_ngl_dense:
+      enabled: true
+      source: "NGL_US_EU_dense"
+      n_stations: 6000  # 美国/欧洲密集网
+      purpose: "局部精度验证 + Added Value分析"
+      analysis:
+        - "kriging_interpolation"  # 克里金插值生成GNSS PWV面图
+        - "spatial_error_map"      # RMSE空间分布热力图
+        - "terrain_analysis"       # 地形分层误差分析
+      regions:
+        - {name: "Rocky_Mountains", lat: [37, 49], lon: [-115, -105], type: "high_elevation"}
+        - {name: "Mississippi_Plain", lat: [30, 40], lon: [-95, -85], type: "low_elevation"}
+
+    # 第三级: 物理绝对真值验证
+    level3_igra:
+      enabled: true
+      source: "NOAA_IGRA_v2"  # 不是怀俄明爬虫！
+      data_url: "https://www.ncei.noaa.gov/data/integrated-global-radiosonde-archive/"
+      purpose: "探空垂直积分验证"
+      processing:
+        - "vertical_integration"  # 计算TPW
+        - "quality_control"       # QC flags
+      matching:
+        time_threshold: 3  # hours
+        distance_threshold: 30  # km
+
+# -----------------------------------------------------------------------------
+# 数据预处理配置
+# -----------------------------------------------------------------------------
+preprocessing:
+  # 质量控制
+  quality_control:
+    tb_range: [50, 350]        # 亮温有效范围(K)
+    pwv_range: [0, 100]        # PWV有效范围(kg/m2)
+    zenith_angle_max: 60       # 卫星天顶角阈值(度)
+    remove_ice: true           # 去除冰雪像元
+    ice_threshold: 0.8         # 冰雪覆盖阈值
+
+  # Input normalization (Added 2026-01-19 to fix NaN loss)
+  normalization:
+    tb_channels:
+      method: "minmax"
+      range: [100, 300]  # K → [0, 1]
+    physics_indices:
+      method: "tanh"
+      scale: 50.0  # tanh(x/50) → [-1, 1]
+
+  # 重采样 (Pyresample高斯加权)
+  resampling:
+    library: "pyresample"
+    method: "gaussian_weighted"
+
+    # 低频通道策略 (10-30 GHz)
+    low_freq:
+      channels: ["10.65", "18.7", "23.8"]
+      sigma: 30  # km (影响半径)
+      strategy: "oversample"  # 过采样，平滑大光斑
+
+    # 高频通道策略 (89-183 GHz)
+    high_freq:
+      channels: ["36.5", "89.0", "118.75", "183.31"]
+      sigma: 15  # km
+      strategy: "match"  # 匹配采样，保留纹理
+
+# -----------------------------------------------------------------------------
+# 模型配置
+# -----------------------------------------------------------------------------
+model:
+  name: "Pi-Mamba-V2"
+
+  # 输入维度 (总计45通道)
+  input_channels: 45  # 23(TB) + 3(物理指数) + 10(地表分量) + 1(NDVI) + 1(DEM) + 1(Lat) + 6(时空编码)
+  # Note 2026-01-19: Test data has 26 TB channels and 12 LC components (dynamically detected)
+  output_channels: 1  # PWV (pixel-level prediction, shape: B x 1 x H x W)
+
+  # 网络架构
+  architecture:
+    type: "UNet"
+    encoder:
+      depths: [2, 2, 4, 2]
+      dims: [64, 128, 256, 512]
+      drop_path_rate: 0.1
+
+    decoder:
+      dims: [512, 256, 128, 64]
+      use_skip_connection: true
+
+    # 物理感知模块
+    physics_aware:
+      # 频谱-空间解耦头
+      spectral_spatial_decoupling:
+        enabled: true
+        type: "1x1Conv_MLP"
+        purpose: "像元级特征提取，模拟1D-Var"
+
+      # 地表分量注入
+      fractional_injection:
+        enabled: true
+        method: "AdaIN"  # Adaptive Instance Normalization
+        condition_dim: 10  # 地表覆盖分量维度
+        injection_points: ["skip_connection"]  # 注入位置
+
+    # VSS Block配置
+    vss_block:
+      d_state: 16
+      d_conv: 3
+      expand: 2
+      use_ss2d: true  # 2D Selective Scan
+
+# -----------------------------------------------------------------------------
+# 训练配置
+# -----------------------------------------------------------------------------
+training:
+  batch_size: 16
+  num_epochs: 100
+  num_workers: 8
+
+  optimizer:
+    type: "AdamW"
+    lr: 0.00001  # Updated 2026-01-19: Reduced from 0.0001 to fix NaN loss
+    weight_decay: 0.01
+
+  scheduler:
+    type: "CosineAnnealingWarmRestarts"
+    T_0: 10
+    T_mult: 2
+    eta_min: 1e-6
+    warmup_epochs: 5
+
+  # 混合监督损失函数 (核心创新)
+  loss:
+    type: "HybridLoss"
+    formula: "L_ERA5 + λ * L_GNSS_Anchor + γ * L_Physics"
+
+    # ERA5全图MSE (学习空间纹理)
+    era5_loss:
+      weight: 1.0
+      type: "MSE"
+      scope: "全图"
+      purpose: "学习空间分布和纹理特征"
+
+    # GNSS锚点Loss (修正ERA5偏差)
+    gnss_anchor_loss:
+      weight: 10.0  # λ ≈ 10
+      type: "MSE"
+      scope: "仅在1500个GNSS站点像素"
+      purpose: "修正ERA5系统偏差，强化高精度点约束"
+
+    # 物理约束Loss
+    physics_loss:
+      weight: 0.05  # γ
+      type: "ReLU_negative_penalty"
+      constraint: "PWV >= 0"
+      purpose: "物理合理性约束"
+
+  # 混合精度训练
+  mixed_precision:
+    enabled: true
+    dtype: "float16"
+
+  # 分布式训练
+  distributed:
+    enabled: false
+    backend: "nccl"
+
+  # Checkpoint
+  checkpoint:
+    save_dir: "outputs/checkpoints"
+    save_freq: 5
+    monitor: "val_rmse"
+    mode: "min"
+
+  # Early Stopping
+  early_stopping:
+    enabled: true
+    patience: 15
+    min_delta: 0.001
+
+  # Logging
+  logging:
+    log_dir: "outputs/logs"
+    use_tensorboard: true
+    use_wandb: false
+
+# -----------------------------------------------------------------------------
+# 评估配置 (分级验证)
+# -----------------------------------------------------------------------------
+evaluation:
+  # 统计指标
+  metrics:
+    - "RMSE"
+    - "MAE"
+    - "Bias"
+    - "R2"
+    - "PSNR"
+    - "SSIM"
+
+  # 分级验证
+  hierarchical_validation:
+    # Level 1: 全球验证
+    level1:
+      dataset: "IGS_core"
+      analysis: ["global_bias", "global_rmse", "climate_zone_stratification"]
+      visualization: ["scatter_plot", "bias_map"]
+
+    # Level 2: 区域验证
+    level2:
+      dataset: "NGL_dense"
+      analysis:
+        - "kriging_interpolation"
+        - "spatial_error_map"
+        - "terrain_stratification"
+        - "added_value_analysis"  # 相比ERA5的改进
+      visualization: ["heatmap", "terrain_boxplot"]
+
+    # Level 3: 探空验证
+    level3:
+      dataset: "IGRA_radiosonde"
+      analysis: ["absolute_accuracy", "vertical_integration"]
+      visualization: ["scatter_with_density", "taylor_diagram"]
+
+  # 混合像元效应分析 (RSE加分项)
+  mixed_pixel_analysis:
+    enabled: true
+    stratify_by: "water_fraction"  # 按水体占比分层
+    bins: [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+    purpose: "证明分量输入解决了混合像元问题"
+
+  # 可解释性分析
+  interpretability:
+    shap_analysis:
+      enabled: true
+      regions: ["Amazon_Rainforest", "Sahara_Desert"]
+      purpose: "证明模型学到了物理机制"
+
+# -----------------------------------------------------------------------------
+# 硬件配置
+# -----------------------------------------------------------------------------
+hardware:
+  device: "cuda"
+  gpu_ids: [0]
+  cudnn:
+    benchmark: true
+    deterministic: false
+
+# -----------------------------------------------------------------------------
+# 随机种子
+# -----------------------------------------------------------------------------
+seed: 42
