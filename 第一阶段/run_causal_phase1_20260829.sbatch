@@ -3,6 +3,7 @@
 #SBATCH --job-name=p1causal
 #SBATCH --partition=L40
 #SBATCH --gres=gpu:l40:1
+#SBATCH --nodelist=gpu4001
 #SBATCH --cpus-per-task=7
 #SBATCH --mem=96G
 #SBATCH --time=2-00:00:00
