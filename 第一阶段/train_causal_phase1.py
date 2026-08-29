@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -151,6 +152,8 @@ def main() -> int:
     model.eval()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     torch.save({"model_state_dict": model.state_dict(), "target": args.target, "features": features}, args.output_dir / "model.pth")
+    with (args.output_dir / "scalers.pkl").open("wb") as handle:
+        pickle.dump({"x_scaler": x_scaler, "y_scaler": y_scaler}, handle)
     result_metrics = {}
     for name in ("test_2017", "val_2018", "val_leave_station"):
         idx = split[name]
@@ -167,6 +170,14 @@ def main() -> int:
         "feature_names": features,
         "dataset_counts": {key: int(len(value)) for key, value in split.items() if key != "held_out_stations"},
         "held_out_stations": split["held_out_stations"].tolist(),
+        "year_counts": {
+            name: {
+                str(year): int(np.sum(pd.to_numeric(meta.iloc[idx]["YEAR"], errors="coerce") == year))
+                for year in sorted(pd.to_numeric(meta.iloc[idx]["YEAR"], errors="coerce").dropna().unique())
+            }
+            for name, idx in split.items()
+            if name != "held_out_stations"
+        },
         "scalers_fit_on": "train",
         "epochs": args.epochs,
         "metrics": result_metrics,
