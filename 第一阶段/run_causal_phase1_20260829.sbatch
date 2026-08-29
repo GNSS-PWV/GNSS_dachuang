@@ -16,6 +16,12 @@ CODE_DIR="/share/home/u23114/GNSS_dachuang/GNSS_dachuang_code/第一阶段"
 DATA_DIR="/share/home/u23114/GNSS_dachuang/GNSS_dachuang_data/第二阶段/profile_reconstructed_igra_20260825"
 OUT_ROOT="/share/home/u23114/GNSS_dachuang/causal_phase1_results"
 cd "${CODE_DIR}"
+"${PYTHON}" - <<'PY'
+import torch
+if not torch.cuda.is_available():
+    raise SystemExit("CUDA is unavailable on the allocated node; refusing CPU fallback")
+print(f"cuda={torch.cuda.get_device_name(0)}", flush=True)
+PY
 case "${TARGET}" in
   PS|WPS|TS|Tm) ;;
   *) echo "target must be PS, WPS, TS, or Tm" >&2; exit 2 ;;
