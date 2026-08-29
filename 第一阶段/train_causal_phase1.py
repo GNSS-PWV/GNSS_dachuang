@@ -92,6 +92,16 @@ def metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float | int]:
     }
 
 
+def predict_in_batches(model: nn.Module, x: np.ndarray, device: torch.device, batch_size: int = 2048) -> np.ndarray:
+    """Run evaluation without placing an entire split on GPU at once."""
+    outputs = []
+    with torch.no_grad():
+        for start in range(0, len(x), batch_size):
+            batch = torch.from_numpy(x[start:start + batch_size]).to(device)
+            outputs.append(model(batch).cpu().numpy())
+    return np.concatenate(outputs, axis=0)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=Path, required=True)
@@ -139,18 +149,17 @@ def main() -> int:
         print(f"epoch={epoch}/{args.epochs} train_loss={history[-1]:.6f}", flush=True)
 
     model.eval()
-    result_metrics = {}
-    with torch.no_grad():
-        for name in ("test_2017", "val_2018", "val_leave_station"):
-            idx = split[name]
-            if not len(idx):
-                result_metrics[name] = {"status": "empty"}
-                continue
-            pred_scaled = model(torch.from_numpy(x_scaled[idx]).to(device)).cpu().numpy()
-            pred = y_scaler.inverse_transform(pred_scaled).ravel()
-            result_metrics[name] = metrics(y[idx].ravel(), pred)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     torch.save({"model_state_dict": model.state_dict(), "target": args.target, "features": features}, args.output_dir / "model.pth")
+    result_metrics = {}
+    for name in ("test_2017", "val_2018", "val_leave_station"):
+        idx = split[name]
+        if not len(idx):
+            result_metrics[name] = {"status": "empty"}
+            continue
+        pred_scaled = predict_in_batches(model, x_scaled[idx], device)
+        pred = y_scaler.inverse_transform(pred_scaled).ravel()
+        result_metrics[name] = metrics(y[idx].ravel(), pred)
     (args.output_dir / "metrics.json").write_text(json.dumps({
         "protocol": "causal_past_only_leave_station_10pct_seed42_year_split",
         "target": args.target,
