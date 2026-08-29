@@ -3,7 +3,7 @@
 #SBATCH --job-name=p1causal
 #SBATCH --partition=L40
 #SBATCH --gres=gpu:l40:1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=7
 #SBATCH --mem=96G
 #SBATCH --time=2-00:00:00
 #SBATCH --output=/share/home/u23114/GNSS_dachuang/training_logs/p1causal_%j.out
