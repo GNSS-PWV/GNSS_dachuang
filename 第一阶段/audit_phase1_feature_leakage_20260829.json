@@ -1,0 +1,704 @@
+{
+  "status": "pass",
+  "audited_scripts": [
+    "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+    "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+    "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+    "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py"
+  ],
+  "historical_leakage_findings": [
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 124,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_diff1'] = data['PS'] - data['PS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 128,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_TS_ratio'] = data['PS'] / (data['TS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 128,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_TS_ratio'] = data['PS'] / (data['TS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 129,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_TS_product'] = data['PS'] * data['TS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 129,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_TS_product'] = data['PS'] * data['TS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 134,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'PS_ma{w}'] = ps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 136,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'PS_std{w}'] = ps_group.rolling(window=w, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 143,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_ratio'] = data['WPS'] / (data['PS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 143,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_ratio'] = data['WPS'] / (data['PS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 144,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_diff'] = data['PS'] - data['WPS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 144,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_diff'] = data['PS'] - data['WPS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 145,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_product'] = data['WPS'] * data['PS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 145,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_product'] = data['WPS'] * data['PS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 147,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'WPS_ma{w}'] = wps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 155,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_diff1'] = data['TS'] - data['TS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 158,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'TS_ma{w}'] = ts_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\PS\\gru_ps_2.py",
+      "line": 159,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['TS_std3'] = ts_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 147,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_diff1'] = data['WPS'] - data['WPS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 152,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_TS_ratio'] = data['WPS'] / (data['TS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 152,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_TS_ratio'] = data['WPS'] / (data['TS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 153,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_TS_product'] = data['WPS'] * data['TS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 153,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_TS_product'] = data['WPS'] * data['TS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 156,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_ratio'] = data['WPS'] / (data['PS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 156,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_ratio'] = data['WPS'] / (data['PS'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 157,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_product'] = data['WPS'] * data['PS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 157,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_PS_product'] = data['WPS'] * data['PS']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 161,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'WPS_ma{w}'] = wps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols,",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 165,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'WPS_std{w}'] = wps_group.rolling(window=w, min_periods=1).std().reset_index(level=group_cols,",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 173,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_diff1'] = data['PS'] - data['PS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 176,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'PS_ma{w}'] = ps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols,",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 178,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['PS_std3'] = ps_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 185,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_diff1'] = data['TS'] - data['TS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 188,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'TS_ma{w}'] = ts_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols,",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\WPS\\gru_wps_1.py",
+      "line": 190,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['TS_std3'] = ts_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 125,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_diff1'] = data['TS'] - data['TS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 129,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'TS_ma{w}'] = ts_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 131,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'TS_std{w}'] = ts_group.rolling(window=w, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 137,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['Tm_diff1'] = data['Tm'] - data['Tm_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 141,
+      "target": "Tm",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'Tm_ma{w}'] = tm_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 143,
+      "target": "Tm",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'Tm_std{w}'] = tm_group.rolling(window=w, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 149,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_diff1'] = data['PS'] - data['PS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 152,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'PS_ma{w}'] = ps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 153,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['PS_std3'] = ps_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 159,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_diff1'] = data['WPS'] - data['WPS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 162,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'WPS_ma{w}'] = wps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 163,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['WPS_std3'] = wps_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 166,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_ratio'] = data['TS'] / (data['Tm'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 166,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_ratio'] = data['TS'] / (data['Tm'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 167,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_product'] = data['TS'] * data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 167,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_product'] = data['TS'] * data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 168,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_diff'] = data['TS'] - data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_tm_a800.py",
+      "line": 168,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_diff'] = data['TS'] - data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 124,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_diff1'] = data['TS'] - data['TS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 128,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'TS_ma{w}'] = ts_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 130,
+      "target": "TS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'TS_std{w}'] = ts_group.rolling(window=w, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 136,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['Tm_diff1'] = data['Tm'] - data['Tm_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 140,
+      "target": "Tm",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'Tm_ma{w}'] = tm_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 142,
+      "target": "Tm",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'Tm_std{w}'] = tm_group.rolling(window=w, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 148,
+      "target": "PS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['PS_diff1'] = data['PS'] - data['PS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 151,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'PS_ma{w}'] = ps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 152,
+      "target": "PS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['PS_std3'] = ps_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 158,
+      "target": "WPS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['WPS_diff1'] = data['WPS'] - data['WPS_lag1']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 161,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data[f'WPS_ma{w}'] = wps_group.rolling(window=w, min_periods=1).mean().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 162,
+      "target": "WPS",
+      "rule": "rolling_window_includes_current_row",
+      "text": "data['WPS_std3'] = wps_group.rolling(window=3, min_periods=1).std().reset_index(level=group_cols, drop=True)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 165,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_ratio'] = data['TS'] / (data['Tm'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 165,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_ratio'] = data['TS'] / (data['Tm'] + 1e-8)",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 166,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_product'] = data['TS'] * data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 166,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_product'] = data['TS'] * data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 167,
+      "target": "TS",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_diff'] = data['TS'] - data['Tm']",
+      "severity": "high"
+    },
+    {
+      "file": "D:\\gnss\u6c34\u6c7d\u53cd\u6f14\\_github_remote_clone_20260826\\\u7b2c\u4e00\u9636\u6bb5\\Ts_Tm\\gru_ts_tm_fixed.py",
+      "line": 167,
+      "target": "Tm",
+      "rule": "current_dynamic_value_in_derived_feature",
+      "text": "data['TS_Tm_diff'] = data['TS'] - data['Tm']",
+      "severity": "high"
+    }
+  ],
+  "historical_finding_count": 70,
+  "causal_contracts": [
+    {
+      "target": "PS",
+      "dynamic_current_values_allowed": false,
+      "allowed_temporal_sources": "t-1 and earlier within station_id + ELV",
+      "lags": [
+        1,
+        2,
+        3,
+        6,
+        12
+      ],
+      "rolling_windows": [
+        3,
+        6,
+        12
+      ],
+      "rolling_alignment": "shift(1) before rolling",
+      "static_sources": [
+        "LAT",
+        "LON",
+        "ELV"
+      ],
+      "calendar_sources": [
+        "TIME"
+      ]
+    },
+    {
+      "target": "WPS",
+      "dynamic_current_values_allowed": false,
+      "allowed_temporal_sources": "t-1 and earlier within station_id + ELV",
+      "lags": [
+        1,
+        2,
+        3,
+        6,
+        12
+      ],
+      "rolling_windows": [
+        3,
+        6,
+        12
+      ],
+      "rolling_alignment": "shift(1) before rolling",
+      "static_sources": [
+        "LAT",
+        "LON",
+        "ELV"
+      ],
+      "calendar_sources": [
+        "TIME"
+      ]
+    },
+    {
+      "target": "TS",
+      "dynamic_current_values_allowed": false,
+      "allowed_temporal_sources": "t-1 and earlier within station_id + ELV",
+      "lags": [
+        1,
+        2,
+        3,
+        6,
+        12
+      ],
+      "rolling_windows": [
+        3,
+        6,
+        12
+      ],
+      "rolling_alignment": "shift(1) before rolling",
+      "static_sources": [
+        "LAT",
+        "LON",
+        "ELV"
+      ],
+      "calendar_sources": [
+        "TIME"
+      ]
+    },
+    {
+      "target": "Tm",
+      "dynamic_current_values_allowed": false,
+      "allowed_temporal_sources": "t-1 and earlier within station_id + ELV",
+      "lags": [
+        1,
+        2,
+        3,
+        6,
+        12
+      ],
+      "rolling_windows": [
+        3,
+        6,
+        12
+      ],
+      "rolling_alignment": "shift(1) before rolling",
+      "static_sources": [
+        "LAT",
+        "LON",
+        "ELV"
+      ],
+      "calendar_sources": [
+        "TIME"
+      ]
+    }
+  ],
+  "causal_module_validation": {
+    "checks": [
+      {
+        "target": "PS",
+        "feature_count": 81,
+        "current_mutation_does_not_change_current_features": true
+      },
+      {
+        "target": "WPS",
+        "feature_count": 81,
+        "current_mutation_does_not_change_current_features": true
+      },
+      {
+        "target": "TS",
+        "feature_count": 81,
+        "current_mutation_does_not_change_current_features": true
+      },
+      {
+        "target": "Tm",
+        "feature_count": 81,
+        "current_mutation_does_not_change_current_features": true
+      }
+    ],
+    "status": "pass"
+  },
+  "interpretation": "Historical findings document why old scores are not deployment scores. The new module is isolated and must be used by a future retraining job."
+}
