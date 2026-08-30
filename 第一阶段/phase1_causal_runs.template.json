@@ -1,0 +1,37 @@
+{
+  "schema_version": "phase1-summary-input/v1",
+  "runs": [
+    {
+      "target": "PS",
+      "run_id": "2362126",
+      "target_unit": "hPa",
+      "metrics_path": "PS_causal_2362126_metrics.json",
+      "model_path": "PS_causal_2362126_model.pth",
+      "scalers_path": null
+    },
+    {
+      "target": "WPS",
+      "run_id": "2363862",
+      "target_unit": "hPa",
+      "metrics_path": "WPS_causal_2363862_metrics.json",
+      "model_path": "WPS_causal_2363862_model.pth",
+      "scalers_path": "WPS_causal_2363862_scalers.pkl"
+    },
+    {
+      "target": "TS",
+      "run_id": "2364189",
+      "target_unit": "K",
+      "metrics_path": "TS_causal_2364189_metrics.json",
+      "model_path": "TS_causal_2364189_model.pth",
+      "scalers_path": "TS_causal_2364189_scalers.pkl"
+    },
+    {
+      "target": "Tm",
+      "run_id": "2364951",
+      "target_unit": "K",
+      "metrics_path": null,
+      "model_path": null,
+      "scalers_path": null
+    }
+  ]
+}

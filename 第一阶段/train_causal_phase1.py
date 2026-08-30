@@ -23,6 +23,7 @@ from causal_features import make_causal_sequences
 
 
 TARGETS = ("PS", "WPS", "TS", "Tm")
+TARGET_UNITS = {"PS": "hPa", "WPS": "hPa", "TS": "K", "Tm": "K"}
 
 
 class CausalGRU(nn.Module):
@@ -151,7 +152,9 @@ def main() -> int:
 
     model.eval()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    torch.save({"model_state_dict": model.state_dict(), "target": args.target, "features": features}, args.output_dir / "model.pth")
+    torch.save({"model_state_dict": model.state_dict(), "target": args.target,
+        "target_unit": TARGET_UNITS[args.target],
+        "time_steps": args.time_steps, "features": features}, args.output_dir / "model.pth")
     with (args.output_dir / "scalers.pkl").open("wb") as handle:
         pickle.dump({"x_scaler": x_scaler, "y_scaler": y_scaler}, handle)
     result_metrics = {}
@@ -164,8 +167,11 @@ def main() -> int:
         pred = y_scaler.inverse_transform(pred_scaled).ravel()
         result_metrics[name] = metrics(y[idx].ravel(), pred)
     (args.output_dir / "metrics.json").write_text(json.dumps({
+        "schema_version": "causal_phase1_metrics/v2",
         "protocol": "causal_past_only_leave_station_10pct_seed42_year_split",
         "target": args.target,
+        "target_unit": TARGET_UNITS[args.target],
+        "time_steps": args.time_steps,
         "feature_count": len(features),
         "feature_names": features,
         "dataset_counts": {key: int(len(value)) for key, value in split.items() if key != "held_out_stations"},
