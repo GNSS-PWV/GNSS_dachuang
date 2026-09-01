@@ -1,5 +1,12 @@
 # 第二阶段: ZWD -> PWV 直接映射深度学习模型
 
+> **Status as of 2026-09-01:** The numerical results below are historical
+> radiosonde/reconstructed-profile pipeline checks, not independent GNSS-PWV
+> deployment accuracy. Do not report the `0.0653 mm` value or GPT3 improvement
+> percentages as final GNSS-PWV performance. Formal retraining is gated by
+> `preflight_independent_phase2_inputs.py` and requires independent GNSS
+> `ZTD-ZHD`, causal phase-one profiles, and independent PWV labels.
+
 ## 概述
 
 本阶段实现项目的核心创新 —— 基于 Transformer 的廓线序列深度学习框架，直接从湿延迟(ZWD)映射到可降水量(PWV)，摆脱传统 Saastamoinen 模型对加权平均温度 Tm 的线性假设。
