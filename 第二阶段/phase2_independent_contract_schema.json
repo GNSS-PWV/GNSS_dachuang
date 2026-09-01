@@ -1,0 +1,21 @@
+{
+  "schema_version": "phase2-independent-contract/v1",
+  "description": "One row per station/time phase-two sample. Do not use historical reconstructed *_met.txt as this contract.",
+  "required_columns": [
+    "sample_id", "station_id", "analysis_time_utc", "split",
+    "ztd_gnss_mm", "zhd_model_mm", "zwd_gnss_mm", "zwd_derivation",
+    "gnss_source_id", "gnss_epoch_id", "zhd_source_id", "gnss_available_at_utc",
+    "profile_path", "profile_sha256", "profile_source", "profile_issue_time_utc", "profile_max_observation_time_utc", "p1_model_id", "p1_model_sha256",
+    "pwv_label_mm", "label_time_utc", "label_source", "label_source_id", "label_epoch_id", "label_available_at_utc",
+    "input_lineage_root", "label_lineage_root", "match_tolerance_seconds"
+  ],
+  "required_values": {
+    "zwd_derivation": "ztd_minus_zhd",
+    "profile_source": "phase1_causal"
+  },
+  "profile_csv": {
+    "required_columns": ["ELV", "TS", "PS", "WPS"],
+    "forbidden_columns": ["PWV", "ZWD", "ZHD", "ZTD", "Tm", "Pi"]
+  },
+  "scientific_boundary": "ZWD must be independent GNSS ZTD minus ZHD. The phase-one profile must contain causal predictions only. PWV labels must have lineage distinct from all inputs."
+}
