@@ -29,9 +29,9 @@
       "target": "Tm",
       "run_id": "2364951",
       "target_unit": "K",
-      "metrics_path": null,
-      "model_path": null,
-      "scalers_path": null
+      "metrics_path": "Tm_causal_2364951_metrics.json",
+      "model_path": "Tm_causal_2364951_model.pth",
+      "scalers_path": "Tm_causal_2364951_scalers.pkl"
     }
   ]
 }
