@@ -3,11 +3,11 @@
   "runs": [
     {
       "target": "PS",
-      "run_id": "2362126",
+      "run_id": "2375251",
       "target_unit": "hPa",
-      "metrics_path": "PS_causal_2362126_metrics.json",
-      "model_path": "PS_causal_2362126_model.pth",
-      "scalers_path": null
+      "metrics_path": "PS_causal_2375251_metrics.json",
+      "model_path": "PS_causal_2375251_model.pth",
+      "scalers_path": "PS_causal_2375251_scalers.pkl"
     },
     {
       "target": "WPS",
