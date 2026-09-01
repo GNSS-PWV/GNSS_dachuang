@@ -30,7 +30,7 @@ IGS 5 分钟 ZTD + ERA5 单层气压/温度/位势高度
 2. **空间：** 匹配最近的 0.25° ERA5 经纬网格点。
 3. **气压高程改正：** 以 IGS 椭球高减去 ERA5 geopotential height 得到临时高度差，按标准温度递减率 0.0065 K/m 及静力关系修正 ERA5 `sp` 到站高。
 4. **ZHD：**
-   
+
    `ZHD(mm) = 2.2768 × P(hPa) / [1 − 0.00266 cos(2φ) − 0.00028 H(km)]`
 
 5. **ZWD：** `ZWD(mm) = ZTD_IGS(mm) − ZHD(mm)`。
