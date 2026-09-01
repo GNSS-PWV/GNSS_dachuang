@@ -27,6 +27,21 @@ def _grouped(df: pd.DataFrame, column: str, groups: list[str]):
     return df.groupby(groups, sort=False, dropna=False)[column]
 
 
+def _contiguous_valid_segments(group: pd.DataFrame, valid: np.ndarray) -> list[pd.DataFrame]:
+    """Split a sorted group at invalid rows instead of compressing gaps away."""
+    segments: list[pd.DataFrame] = []
+    start: int | None = None
+    for index, is_valid in enumerate(valid):
+        if is_valid and start is None:
+            start = index
+        elif not is_valid and start is not None:
+            segments.append(group.iloc[start:index])
+            start = None
+    if start is not None:
+        segments.append(group.iloc[start:])
+    return segments
+
+
 def _calendar_features(data: pd.DataFrame) -> None:
     if "TIME" not in data.columns:
         return
@@ -154,30 +169,72 @@ def make_causal_sequences(
         raise ValueError("time_steps must be positive")
     data, features = build_causal_features(frame, target=target)
     groups = _groups(data)
-    usable = data.dropna(subset=features + [target])
     x_values: list[np.ndarray] = []
     y_values: list[float] = []
     metadata: list[dict[str, object]] = []
-    for _, group in usable.groupby(groups, sort=False, dropna=False):
+    for _, group in data.groupby(groups, sort=False, dropna=False):
         group = group.sort_values("TIME", kind="stable") if "TIME" in group else group
-        if len(group) <= time_steps:
-            continue
-        values = group[features].to_numpy(dtype=np.float32)
-        labels = group[target].to_numpy(dtype=np.float32)
-        for end in range(time_steps, len(group)):
-            x_values.append(values[end - time_steps:end])
-            y_values.append(float(labels[end]))
-            row = group.iloc[end]
-            metadata.append({
-                "TIME": row.get("TIME"),
-                "station_id": row.get("station_id"),
-                "ELV": row.get("ELV"),
-                "YEAR": row.get("YEAR"),
-                "DOY": row.get("DOY"),
-            })
+        valid = group[features + [target]].notna().all(axis=1).to_numpy()
+        for segment in _contiguous_valid_segments(group, valid):
+            if len(segment) <= time_steps:
+                continue
+            values = segment[features].to_numpy(dtype=np.float32)
+            labels = segment[target].to_numpy(dtype=np.float32)
+            for end in range(time_steps, len(segment)):
+                x_values.append(values[end - time_steps:end])
+                y_values.append(float(labels[end]))
+                row = segment.iloc[end]
+                metadata.append({
+                    "TIME": row.get("TIME"),
+                    "station_id": row.get("station_id"),
+                    "ELV": row.get("ELV"),
+                    "YEAR": row.get("YEAR"),
+                    "DOY": row.get("DOY"),
+                })
     if not x_values:
         raise ValueError("no causal sequences were created")
     return np.stack(x_values), np.asarray(y_values, dtype=np.float32)[:, None], pd.DataFrame(metadata), features
+
+
+def make_causal_inference_sequences(
+    frame: pd.DataFrame,
+    *,
+    time_steps: int = 24,
+) -> tuple[np.ndarray, pd.DataFrame, list[str]]:
+    """Build past-only sequences without requiring the prediction label.
+
+    This is the deployment counterpart of :func:`make_causal_sequences`.  The
+    historical training function must retain a non-null target for supervised
+    learning; inference must not require the unknown value at prediction time.
+    It deliberately preserves the same feature order and sequence alignment:
+    rows ``[t-time_steps, t)`` predict metadata row ``t``.
+    """
+    if time_steps < 1:
+        raise ValueError("time_steps must be positive")
+    data, features = build_causal_features(frame, target="PS")
+    groups = _groups(data)
+    x_values: list[np.ndarray] = []
+    metadata: list[dict[str, object]] = []
+    for _, group in data.groupby(groups, sort=False, dropna=False):
+        group = group.sort_values("TIME", kind="stable") if "TIME" in group else group
+        valid = group[features].notna().all(axis=1).to_numpy()
+        for segment in _contiguous_valid_segments(group, valid):
+            if len(segment) <= time_steps:
+                continue
+            values = segment[features].to_numpy(dtype=np.float32)
+            for end in range(time_steps, len(segment)):
+                x_values.append(values[end - time_steps:end])
+                row = segment.iloc[end]
+                metadata.append({
+                    "TIME": row.get("TIME"),
+                    "station_id": row.get("station_id"),
+                    "ELV": row.get("ELV"),
+                    "YEAR": row.get("YEAR"),
+                    "DOY": row.get("DOY"),
+                })
+    if not x_values:
+        raise ValueError("no causal inference sequences were created")
+    return np.stack(x_values), pd.DataFrame(metadata), features
 
 
 def feature_contract(target: str) -> dict[str, object]:
